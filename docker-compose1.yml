@@ -1,0 +1,62 @@
+version: "3.7"
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: drone_nginx
+    ports:
+      - "80:80"
+    restart: always
+    networks:
+      - dronenet
+  mysql:
+    image: mysql:5.7
+    restart: always
+    container_name: drone_mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=MyNewPass
+      - MYSQL_DATABASE=drone
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=MyNewPass
+    networks:
+      - dronenet
+    volumes:
+      - /path/to/conf/my.cnf:/etc/mysql/my.cnf:rw
+      - /path/to/data:/var/lib/mysql/:rw
+      - /path/to/logs:/var/log/mysql/:rw
+  drone-server:
+    image: drone/drone:1.0.0-rc.5 #不要用latest,latest并非稳定版本
+    container_name: dronetest_server
+    networks: 
+      - dronenet
+    volumes:
+      - /home/drone-image:/var/lib/drone/:rw
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+    restart: always
+    environment:
+      - DRONE_DEBUG=true
+      - DRONE_DATABASE_DATASOURCE=drone:MyNewPass@tcp(drone_mysql:3306)/drone?parseTime=true   #mysql配置，要与上边mysql容器中的配置一致
+      - DRONE_DATABASE_DRIVER=mysql
+      - DRONE_GITHUB_SERVER=https://github.com
+      - DRONE_GITHUB_CLIENT_ID=c588759503021662b7f5  #Github Client ID
+      - DRONE_GITHUB_CLIENT_SECRET=59b8c09f97fb9dca771a54ef275461fcca894e87 #Github Client Secret
+      - DRONE_RUNNER_CAPACITY=2
+      - DRONE_RPC_SECRET=YOU_KEY_ALQU2M0KdptXUdTPKcEw  #RPC秘钥
+      - DRONE_SERVER_PROTO=http  #这个配置决定了你激活时仓库中的webhook地址的proto
+      - DRONE_SERVER_HOST=drone.domain.com
+      - DRONE_USER_CREATE=username:Zydiii,admin:true  #管理员账号，一般是你github用户名
+  drone-agent:
+    image: drone/agent:1.0.0-rc.5
+    container_name: dronetest_agent
+    restart: always
+    networks: 
+      - dronenet
+    depends_on:
+      - drone-server  #依赖drone_server，并在其后启动
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+    environment:
+      - DRONE_RPC_SERVER=http://drone_server  #drone用的http请求包，url一定要写上协议才能支持
+      - DRONE_RPC_SECRET=YOU_KEY_ALQU2M0KdptXUdTPKcEw  #RPC秘钥，要与drone_server中的一致
+      - DRONE_DEBUG=true
+networks:
+  dronenet:
